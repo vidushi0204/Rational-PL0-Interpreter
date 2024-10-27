@@ -1,5 +1,3 @@
-# Interpreter README
-
 ## Steps to Run the Interpreter
 
 1. **Open the Command Line and Navigate to the Interpreter Directory**
