@@ -1,0 +1,15 @@
+Group is
+
+#if defined (NEW_CM)
+  $/basis.cm
+  $/ml-yacc-lib.cm
+  $smlnj/compiler/compiler.cm 
+  $/smlnj-lib.cm
+#else
+  ml-yacc-lib.cm
+#endif
+  Rational.sml
+  datatypes.sml
+  calc.grm
+  calc.lex
+  calc.sml

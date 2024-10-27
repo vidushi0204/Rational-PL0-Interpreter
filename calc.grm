@@ -1,0 +1,121 @@
+open DataTypes ; 
+
+
+exception VARIABLE_REDCLARATION_ERROR of string ; 
+exception TYPE_MISMATCH_ERROR ; 
+exception VARIABLE_UNDECLARED_ERROR ; 
+
+val typeTable : (string, Type) HashTable.hash_table = HashTable.mkTable (HashString.hashString, op=) (42, Fail "identifier not found") ; 
+
+fun insertInTable( idList : string list , idType : Type) = 
+        if ( null idList ) then () else ( if isSome (HashTable.find typeTable (hd idList)) then raise VARIABLE_REDCLARATION_ERROR( hd idList) else 
+                HashTable.insert typeTable ( hd idList , idType ) ; insertInTable( tl idList , idType) ) ; 
+
+fun getType ( id : string ) = 
+         if( isSome (HashTable.find typeTable  id)) 
+         then HashTable.lookup typeTable id 
+         else raise VARIABLE_UNDECLARED_ERROR ; 
+
+fun checkBool ( typeToBeChecked : Type ) = if ( typeToBeChecked = Bool ) then true else false ; 
+fun checkInt ( typeToBeChecked : Type ) = if ( typeToBeChecked = bigint ) then true else false ; 
+fun checkRat ( typeToBeChecked : Type ) = if ( typeToBeChecked = rational ) then true else false ; 
+
+%%
+%name Calc
+
+%term  LBRACE | RBRACE | LPAREN | RPAREN | EOF | NOT | OR | AND| WRITE | DO | OD | ASSIGN | BOOLEAN | INTEGER |
+      LT | LEQ | NEQ | EQ | GT | GEQ | WHILE | SEMI | COMMA | PRINT | CALL | IF | THEN | ELSE | FI | READ |
+      PLUS | MINUS | TIMES | DIV | MOD | RPLUS | RMINUS | RTIMES | RDIV | INVERSE | NEG | VOOR | MAKERAT | SHOWRAT | SHOWDEC | FROMDEC | TODEC | RAAT |
+      TRUE | FALSE | PROCEDURE | RATIONAL  | RAT of Rational.rational| INT of Bigint.bigint | VARIABLE of string
+
+%nonterm start of AST | blk of BLK | vardecls of VARDECLS | comseq of CMD list | commands of CMD list | command of CMD |
+         expression of Type * exp | intdecls of INTDECLS | ratdecls of RATDECLS | booldecls of BOOLDECLS | varlist of string list | dec of DEC | procdecls of PROCDECLS | proclist of PROCDEF list | procdef of PROCDEF
+
+
+%eop EOF
+%noshift EOF
+%pos int 
+%verbose 
+
+%right ASSIGN
+%left OR
+%left AND
+%left EQ NEQ
+%left GT GEQ LT LEQ
+%left PLUS MINUS RPLUS RMINUS
+%left TIMES MOD DIV RTIMES RDIV
+%right NOT NEG INVERSE
+%left LPAREN RPAREN 
+%left LBRACE RBRACE 
+
+%%
+
+start : blk (HashTable.clear typeTable ; PROG( blk ))
+
+blk : dec comseq ((BLK(dec , comseq ))) 
+
+dec :  vardecls procdecls ((DEC(vardecls,procdecls)))
+
+procdecls : proclist ((PROCDECLS(proclist)))
+proclist : (([]))
+           | procdef SEMI proclist ((procdef::proclist))
+
+procdef : PROCEDURE VARIABLE blk ((PROCDEF(VARIABLE,blk)))
+
+vardecls : ratdecls intdecls booldecls ((VARDECLS(ratdecls,intdecls,booldecls)))
+
+ratdecls : ((insertInTable( [] , rational); RATDECLS([], rational)))
+        | RATIONAL varlist SEMI ( (insertInTable( varlist , rational); RATDECLS(varlist, rational )))
+
+intdecls : ((insertInTable( [] , bigint); INTDECLS([], bigint)))
+        | INTEGER varlist SEMI ( (insertInTable( varlist , bigint); INTDECLS(varlist, bigint )))
+
+booldecls : ((insertInTable( [] , Bool); BOOLDECLS([], Bool)))
+        | BOOLEAN varlist SEMI ( (insertInTable( varlist , Bool);BOOLDECLS(varlist, Bool )))
+
+varlist: VARIABLE (([VARIABLE])) | VARIABLE COMMA varlist  ((VARIABLE::varlist))
+
+comseq: LBRACE commands RBRACE ((commands))
+commands: (([])) | command SEMI commands ((command::commands))
+        
+command: PRINT LPAREN expression RPAREN  ((Print(#2 expression)))
+      | VARIABLE ASSIGN expression (( if getType(VARIABLE)=(#1 expression) then () else raise TYPE_MISMATCH_ERROR ;  Assign(VARIABLE ,#2 expression )))
+      | WHILE expression DO comseq OD( ( if( checkBool( #1 expression)) then () else raise TYPE_MISMATCH_ERROR ; While( #2 expression,comseq)))
+      | IF expression THEN comseq ELSE comseq FI ((if( checkBool( #1 expression)) then () else raise TYPE_MISMATCH_ERROR ; ITE(#2 expression,comseq1,comseq2)))
+      | CALL VARIABLE ((Call(VARIABLE)))
+      | READ LPAREN VARIABLE RPAREN ((Read(VARIABLE)))
+
+expression: expression LEQ expression ( (  if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(Bool , LEQ(#2 expression1 , #2 expression2))))
+            | expression LT expression (( if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , LT(#2 expression1 , #2 expression2))))
+            | expression EQ expression (( if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , EQ(#2 expression1 , #2 expression2))))
+            | expression NEQ expression (( if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , NEQ(#2 expression1 , #2 expression2)) ))
+            | expression GT expression (( if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , GT(#2 expression1 , #2 expression2))))
+            | expression GEQ expression (( if (#1 expression1)= (#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , GEQ(#2 expression1 , #2 expression2))))
+            | expression PLUS expression (( if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(bigint , PLUS(#2 expression1 , #2 expression2))))
+            | expression MINUS expression (( if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(bigint , MINUS(#2 expression1 , #2 expression2))))
+            | expression TIMES expression ((if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (bigint , TIMES(#2 expression1 , #2 expression2))))
+            | expression DIV expression (( if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(bigint , DIV(#2 expression1 , #2 expression2))))
+            | expression MOD expression (( if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(bigint , MOD(#2 expression1 , #2 expression2))))
+            | LPAREN expression RPAREN (( expression))
+
+            | expression RPLUS expression ((if checkRat( #1  expression1) andalso checkRat( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (rational , RPLUS(#2 expression1 , #2 expression2))))
+            | expression RMINUS expression ((if checkRat( #1  expression1) andalso checkRat( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (rational , RMINUS(#2 expression1 , #2 expression2))))
+            | expression RTIMES expression ((if checkRat( #1  expression1) andalso checkRat( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(rational , RTIMES(#2 expression1 , #2 expression2))))
+            | expression RDIV expression ((if checkRat( #1  expression1) andalso checkRat( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(rational , RDIV(#2 expression1 , #2 expression2))))
+            | INVERSE expression ((if checkRat( #1  expression) then () else raise TYPE_MISMATCH_ERROR ;(rational , INVERSE(#2 expression))))
+
+            | NEG expression((if checkRat( #1  expression) orelse checkInt( #1 expression) then () else raise TYPE_MISMATCH_ERROR ;(#1 expression,NEG(#2 expression))))
+
+            | expression AND expression (( if checkBool(#1 expression1) andalso checkBool(#1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(Bool , AND(#2 expression1 , #2 expression2))  ))
+            | expression OR expression ((if checkBool(#1 expression1) andalso checkBool(#1 expression2) then () else raise TYPE_MISMATCH_ERROR ; (Bool , OR(#2 expression1 , #2 expression2)) ))
+            | NOT expression ((if checkBool(#1 expression) then () else raise TYPE_MISMATCH_ERROR ;(Bool , NOT( #2 expression)))) 
+            | TRUE ((Bool , TT ))
+            | FALSE ((Bool , FF ))           
+            | INT (( bigint , INTI(INT) ))
+            | VARIABLE (( getType VARIABLE , VAR(VARIABLE) ))
+            | RAT ((rational,RATI(RAT)))
+            | RAAT expression ((if checkInt( #1  expression1) then () else raise TYPE_MISMATCH_ERROR ;(rational,RAAT(#2 expression))))
+            | MAKERAT LPAREN expression COMMA expression RPAREN ((if checkInt( #1  expression1) andalso checkInt( #1 expression2) then () else raise TYPE_MISMATCH_ERROR ;(rational,MAKERAT(#2 expression1,#2 expression2))))
+            
+             
+
